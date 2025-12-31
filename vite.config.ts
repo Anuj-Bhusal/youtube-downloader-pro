@@ -5,7 +5,7 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: "/youtube-downloader-pro/",  // GitHub repo name for GitHub Pages
+  base: "/",  // Use "/" for custom domain
   server: {
     host: "::",
     port: 8080,
