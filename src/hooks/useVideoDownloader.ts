@@ -82,18 +82,9 @@ export function useVideoDownloader() {
       duration: 5000,
     });
 
-    try {
-      // Simulate initial preparation progress (0-10%)
-      const prepTimeout = setInterval(() => {
-        setDownloadState((prev) => {
-          if (prev.progress < 10) {
-            return { isDownloading: true, progress: prev.progress + 1 };
-          }
-          clearInterval(prepTimeout);
-          return prev;
-        });
-      }, 100);
+    let prepInterval: NodeJS.Timeout | null = null;
 
+    try {
       // Add timeout warning
       const timeoutId = setTimeout(() => {
         toast({
@@ -115,6 +106,12 @@ export function useVideoDownloader() {
 
       clearTimeout(timeoutId);
 
+      // Clear preparation interval when response arrives
+      if (prepInterval) {
+        clearInterval(prepInterval);
+        prepInterval = null;
+      }
+
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }
@@ -129,16 +126,19 @@ export function useVideoDownloader() {
       const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
 
       toast({
-        title: "Preparing File",
-        description: "Server is processing your video...",
+        title: "Downloading",
+        description: "Server is sending your video...",
         duration: 3000,
       });
 
-      // Track progress using ReadableStream while server is fetching
+      // Track progress using ReadableStream while server is sending
       const reader = response.body?.getReader();
       const chunks: Uint8Array[] = [];
       let receivedSize = 0;
-      let lastProgress = 0;
+      let lastProgress = 10; // Start from 10% since prep is done
+      
+      // Set initial progress to 10% when actual download starts
+      setDownloadState({ isDownloading: true, progress: 10 });
 
       if (reader) {
         while (true) {
@@ -151,7 +151,8 @@ export function useVideoDownloader() {
           
           // Update progress percentage only when it changes
           if (totalSize > 0) {
-            const progress = Math.min(Math.floor((receivedSize / totalSize) * 100), 99);
+            // Map 10-99% range to the file download
+            const progress = Math.min(10 + Math.floor((receivedSize / totalSize) * 89), 99);
             
             // Only update if progress actually changed to avoid skipping numbers
             if (progress !== lastProgress) {
@@ -159,6 +160,8 @@ export function useVideoDownloader() {
               lastProgress = progress;
             }
           }
+        }
+      }
         }
       }
 
