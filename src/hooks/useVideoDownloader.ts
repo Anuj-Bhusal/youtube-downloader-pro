@@ -109,17 +109,40 @@ export function useVideoDownloader() {
       const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
       const filename = filenameMatch ? filenameMatch[1] : `video.${selectedFormat.ext}`;
 
-      // Release button immediately - download is starting
-      setDownloadState({ isDownloading: false, progress: 0 });
+      // Get total size from Content-Length header
+      const contentLength = response.headers.get("Content-Length");
+      const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
 
       toast({
         title: "Downloading",
-        description: "Your download is starting...",
+        description: "Download in progress...",
         duration: 3000,
       });
 
-      // Get the blob and create download link
-      const blob = await response.blob();
+      // Track progress using ReadableStream
+      const reader = response.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let receivedSize = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          chunks.push(value);
+          receivedSize += value.length;
+          
+          // Update progress percentage
+          if (totalSize > 0) {
+            const progress = Math.round((receivedSize / totalSize) * 100);
+            setDownloadState({ isDownloading: true, progress });
+          }
+        }
+      }
+
+      // Create blob from chunks
+      const blob = new Blob(chunks);
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
@@ -133,8 +156,10 @@ export function useVideoDownloader() {
         document.body.removeChild(a);
       }, 100);
 
+      setDownloadState({ isDownloading: false, progress: 100 });
+
       toast({
-        title: "Download Started",
+        title: "Download Complete",
         description: `${filename} - Check your downloads folder.`,
         duration: 3000,
       });
