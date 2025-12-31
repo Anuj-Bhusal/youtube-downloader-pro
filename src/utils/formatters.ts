@@ -1,4 +1,8 @@
 export function formatDuration(seconds: number): string {
+  if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
+    return '0:00';
+  }
+  
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
@@ -9,8 +13,14 @@ export function formatDuration(seconds: number): string {
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function formatFileSize(bytes?: number): string {
-  if (!bytes) return 'Unknown size';
+export function formatFileSize(bytes?: number | string | null): string {
+  // If already a string, return it
+  if (typeof bytes === 'string') return bytes;
+  
+  // If null/undefined or not a number, return default
+  if (!bytes || typeof bytes !== 'number' || isNaN(bytes)) {
+    return 'Unknown size';
+  }
   
   const units = ['B', 'KB', 'MB', 'GB'];
   let size = bytes;

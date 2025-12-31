@@ -2,7 +2,7 @@ export interface VideoFormat {
   format_id: string;
   quality: string;
   ext: string;
-  filesize?: number;
+  filesize?: number | null;
   type: 'video' | 'audio';
 }
 
