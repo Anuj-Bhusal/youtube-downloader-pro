@@ -1,4 +1,4 @@
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VideoFormat, DownloadState } from "@/types/video";
 import { cn } from "@/lib/utils";
@@ -7,25 +7,27 @@ interface DownloadButtonProps {
   selectedFormat: VideoFormat | null;
   downloadState: DownloadState;
   onDownload: () => void;
+  onCancel: () => void;
 }
 
 export function DownloadButton({
   selectedFormat,
   downloadState,
   onDownload,
+  onCancel,
 }: DownloadButtonProps) {
   const isDisabled = !selectedFormat || downloadState.isDownloading;
 
   return (
     <div className="w-full max-w-2xl mx-auto px-4 animate-fade-in">
-      <div className="relative">
+      <div className="relative flex gap-2">
         <Button
           onClick={onDownload}
           disabled={isDisabled}
           variant="success"
           size="xl"
           className={cn(
-            "w-full relative overflow-hidden",
+            "flex-1 relative overflow-hidden",
             isDisabled && "opacity-50 cursor-not-allowed"
           )}
         >
@@ -53,6 +55,17 @@ export function DownloadButton({
             />
           )}
         </Button>
+
+        {downloadState.isDownloading && (
+          <Button
+            onClick={onCancel}
+            variant="destructive"
+            size="xl"
+            className="px-6"
+          >
+            <X className="w-5 h-5" />
+          </Button>
+        )}
       </div>
 
       {selectedFormat && !downloadState.isDownloading && (

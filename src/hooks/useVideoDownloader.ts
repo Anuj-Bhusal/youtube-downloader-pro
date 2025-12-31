@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { VideoInfo, VideoFormat, DownloadState } from "@/types/video";
 import { API_ENDPOINTS } from "@/config/api";
 import { toast } from "@/hooks/use-toast";
@@ -31,6 +31,7 @@ export function useVideoDownloader() {
     isDownloading: false,
     progress: 0,
   });
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchVideoInfo = useCallback(async (videoUrl: string) => {
     setIsLoading(true);
@@ -70,6 +71,8 @@ export function useVideoDownloader() {
   const downloadVideo = useCallback(async () => {
     if (!selectedFormat || !url) return;
 
+    // Create new AbortController for this download
+    abortControllerRef.current = new AbortController();
     setDownloadState({ isDownloading: true, progress: 0 });
 
     try {
@@ -96,6 +99,7 @@ export function useVideoDownloader() {
           url: url,
           format_id: selectedFormat.format_id,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       clearTimeout(timeoutId);
@@ -170,16 +174,32 @@ export function useVideoDownloader() {
         duration: 3000,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Download failed";
-      toast({
-        title: "Download Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      // Check if it was a user cancellation
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast({
+          title: "Download Cancelled",
+          description: "Download was cancelled by user.",
+        });
+      } else {
+        const errorMessage = error instanceof Error ? error.message : "Download failed";
+        toast({
+          title: "Download Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
+      abortControllerRef.current = null;
       setDownloadState({ isDownloading: false, progress: 0 });
     }
   }, [selectedFormat, url, videoInfo]);
+
+  const cancelDownload = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
 
   const reset = useCallback(() => {
     setUrl("");
@@ -197,6 +217,7 @@ export function useVideoDownloader() {
     fetchVideoInfo,
     setSelectedFormat,
     downloadVideo,
+    cancelDownload,
     reset,
   };
 }

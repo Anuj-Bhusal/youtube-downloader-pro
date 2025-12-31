@@ -17,6 +17,7 @@ const Index = () => {
     fetchVideoInfo,
     setSelectedFormat,
     downloadVideo,
+    cancelDownload,
     reset,
   } = useVideoDownloader();
 
@@ -78,6 +79,7 @@ const Index = () => {
                   selectedFormat={selectedFormat}
                   downloadState={downloadState}
                   onDownload={downloadVideo}
+                  onCancel={cancelDownload}
                 />
               </section>
             </>
