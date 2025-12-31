@@ -46,20 +46,22 @@ export function useVideoDownloader() {
         body: JSON.stringify({ url: videoUrl }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setVideoInfo(data);
-      } else {
-        throw new Error("API not available");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
-    } catch {
-      // Fallback to mock data for demo
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setVideoInfo(MOCK_VIDEO_INFO);
+
+      const data = await response.json();
+      setVideoInfo(data);
+    } catch (error) {
+      // Show actual error to user
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch video info";
       toast({
-        title: "Demo Mode",
-        description: "Using sample data. Configure API_BASE_URL for real downloads.",
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
       });
+      setVideoInfo(null);
     } finally {
       setIsLoading(false);
     }
@@ -71,20 +73,46 @@ export function useVideoDownloader() {
     setDownloadState({ isDownloading: true, progress: 0 });
 
     try {
-      // Simulate download progress for demo
-      for (let i = 0; i <= 100; i += 10) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        setDownloadState({ isDownloading: true, progress: i });
+      const response = await fetch(API_ENDPOINTS.DOWNLOAD, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: url,
+          format_id: selectedFormat.format_id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
       }
 
+      // Get the filename from Content-Disposition header
+      const contentDisposition = response.headers.get("Content-Disposition");
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch ? filenameMatch[1] : `video.${selectedFormat.ext}`;
+
+      // Get the blob and create download link
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+
+      setDownloadState({ isDownloading: false, progress: 100 });
+      
       toast({
         title: "Download Complete",
         description: `${videoInfo?.title} has been downloaded successfully.`,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Download failed";
       toast({
         title: "Download Failed",
-        description: "An error occurred while downloading. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
