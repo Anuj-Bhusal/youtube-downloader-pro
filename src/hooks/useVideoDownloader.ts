@@ -73,6 +73,12 @@ export function useVideoDownloader() {
     setDownloadState({ isDownloading: true, progress: 0 });
 
     try {
+      // Show preparing toast
+      toast({
+        title: "Preparing Download",
+        description: "Fetching video from YouTube... This may take a moment.",
+      });
+
       const response = await fetch(API_ENDPOINTS.DOWNLOAD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,6 +97,12 @@ export function useVideoDownloader() {
       const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
       const filename = filenameMatch ? filenameMatch[1] : `video.${selectedFormat.ext}`;
 
+      // Show downloading toast
+      toast({
+        title: "Downloading",
+        description: "Your download will start shortly...",
+      });
+
       // Get the blob and create download link
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -99,14 +111,18 @@ export function useVideoDownloader() {
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(a);
+      
+      // Cleanup after a delay
+      setTimeout(() => {
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+      }, 100);
 
       setDownloadState({ isDownloading: false, progress: 100 });
       
       toast({
-        title: "Download Complete",
-        description: `${videoInfo?.title} has been downloaded successfully.`,
+        title: "Download Started",
+        description: `${videoInfo?.title} - Check your downloads folder.`,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Download failed";
