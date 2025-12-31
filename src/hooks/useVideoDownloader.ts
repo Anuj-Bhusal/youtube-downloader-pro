@@ -123,8 +123,36 @@ export function useVideoDownloader() {
         duration: 3000,
       });
 
-      // Get the file from server (shows progress during server fetch)
-      const blob = await response.blob();
+      // Track progress using ReadableStream while server is fetching
+      const reader = response.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let receivedSize = 0;
+      let lastProgress = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          chunks.push(value);
+          receivedSize += value.length;
+          
+          // Update progress percentage only when it changes
+          if (totalSize > 0) {
+            const progress = Math.min(Math.floor((receivedSize / totalSize) * 100), 99);
+            
+            // Only update if progress actually changed to avoid skipping numbers
+            if (progress !== lastProgress) {
+              setDownloadState({ isDownloading: true, progress });
+              lastProgress = progress;
+            }
+          }
+        }
+      }
+
+      // Create blob from chunks
+      const blob = new Blob(chunks);
       
       // Release button - browser will now handle the download
       setDownloadState({ isDownloading: false, progress: 0 });
