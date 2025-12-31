@@ -75,13 +75,24 @@ export function useVideoDownloader() {
     abortControllerRef.current = new AbortController();
     setDownloadState({ isDownloading: true, progress: 0 });
 
+    // Show preparing toast immediately with progress starting at 0%
+    toast({
+      title: "Preparing Download",
+      description: "Server is fetching video from YouTube...",
+      duration: 5000,
+    });
+
     try {
-      // Show preparing toast
-      toast({
-        title: "Preparing Download",
-        description: "Server is fetching video from YouTube...",
-        duration: 5000,
-      });
+      // Simulate initial preparation progress (0-10%)
+      const prepTimeout = setInterval(() => {
+        setDownloadState((prev) => {
+          if (prev.progress < 10) {
+            return { isDownloading: true, progress: prev.progress + 1 };
+          }
+          clearInterval(prepTimeout);
+          return prev;
+        });
+      }, 100);
 
       // Add timeout warning
       const timeoutId = setTimeout(() => {
