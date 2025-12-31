@@ -118,41 +118,22 @@ export function useVideoDownloader() {
       const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
 
       toast({
-        title: "Downloading",
-        description: "Download in progress...",
+        title: "Preparing File",
+        description: "Server is processing your video...",
         duration: 3000,
       });
 
-      // Track progress using ReadableStream
-      const reader = response.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let receivedSize = 0;
-      let lastProgress = 0;
+      // Get the file from server (shows progress during server fetch)
+      const blob = await response.blob();
+      
+      // Release button - browser will now handle the download
+      setDownloadState({ isDownloading: false, progress: 0 });
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
-          
-          chunks.push(value);
-          receivedSize += value.length;
-          
-          // Update progress percentage only when it changes
-          if (totalSize > 0) {
-            const progress = Math.min(Math.floor((receivedSize / totalSize) * 100), 99);
-            
-            // Only update if progress actually changed to avoid skipping numbers
-            if (progress !== lastProgress) {
-              setDownloadState({ isDownloading: true, progress });
-              lastProgress = progress;
-            }
-          }
-        }
-      }
-
-      // Create blob from chunks
-      const blob = new Blob(chunks);
+      toast({
+        title: "Starting Download",
+        description: "Check your browser downloads...",
+        duration: 2000,
+      });
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
@@ -165,14 +146,6 @@ export function useVideoDownloader() {
         window.URL.revokeObjectURL(downloadUrl);
         document.body.removeChild(a);
       }, 100);
-
-      setDownloadState({ isDownloading: false, progress: 100 });
-
-      toast({
-        title: "Download Complete",
-        description: `${filename} - Check your downloads folder.`,
-        duration: 3000,
-      });
     } catch (error) {
       // Check if it was a user cancellation
       if (error instanceof Error && error.name === 'AbortError') {
