@@ -123,6 +123,7 @@ export function useVideoDownloader() {
       const reader = response.body?.getReader();
       const chunks: Uint8Array[] = [];
       let receivedSize = 0;
+      let lastProgress = 0;
 
       if (reader) {
         while (true) {
@@ -133,10 +134,15 @@ export function useVideoDownloader() {
           chunks.push(value);
           receivedSize += value.length;
           
-          // Update progress percentage
+          // Update progress percentage only when it changes
           if (totalSize > 0) {
-            const progress = Math.round((receivedSize / totalSize) * 100);
-            setDownloadState({ isDownloading: true, progress });
+            const progress = Math.min(Math.floor((receivedSize / totalSize) * 100), 99);
+            
+            // Only update if progress actually changed to avoid skipping numbers
+            if (progress !== lastProgress) {
+              setDownloadState({ isDownloading: true, progress });
+              lastProgress = progress;
+            }
           }
         }
       }
