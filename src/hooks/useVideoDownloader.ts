@@ -76,8 +76,18 @@ export function useVideoDownloader() {
       // Show preparing toast
       toast({
         title: "Preparing Download",
-        description: "Fetching video from YouTube... This may take a moment.",
+        description: "Server is fetching video from YouTube...",
+        duration: 5000,
       });
+
+      // Add timeout warning
+      const timeoutId = setTimeout(() => {
+        toast({
+          title: "Still Processing",
+          description: "Large files may take 30-60 seconds. Please wait...",
+          duration: 10000,
+        });
+      }, 8000);
 
       const response = await fetch(API_ENDPOINTS.DOWNLOAD, {
         method: "POST",
@@ -88,6 +98,8 @@ export function useVideoDownloader() {
         }),
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }
@@ -97,10 +109,13 @@ export function useVideoDownloader() {
       const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
       const filename = filenameMatch ? filenameMatch[1] : `video.${selectedFormat.ext}`;
 
-      // Show downloading toast
+      // Release button immediately - download is starting
+      setDownloadState({ isDownloading: false, progress: 0 });
+
       toast({
         title: "Downloading",
-        description: "Your download will start shortly...",
+        description: "Your download is starting...",
+        duration: 3000,
       });
 
       // Get the blob and create download link
@@ -118,11 +133,10 @@ export function useVideoDownloader() {
         document.body.removeChild(a);
       }, 100);
 
-      setDownloadState({ isDownloading: false, progress: 100 });
-      
       toast({
         title: "Download Started",
-        description: `${videoInfo?.title} - Check your downloads folder.`,
+        description: `${filename} - Check your downloads folder.`,
+        duration: 3000,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Download failed";
