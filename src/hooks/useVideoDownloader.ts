@@ -135,16 +135,29 @@ export function useVideoDownloader() {
       const reader = response.body?.getReader();
       const chunks: Uint8Array[] = [];
       let receivedSize = 0;
-      let lastProgress = 10; // Start from 10% since prep is done
+      let lastProgress = 10;
+      let hasReceivedChunks = false;
       
       // Set initial progress to 10% when actual download starts
       setDownloadState({ isDownloading: true, progress: 10 });
+
+      // Start slow progress increment while waiting for chunks (simulated progress)
+      let simulatedProgress = 10;
+      const simulationInterval = setInterval(() => {
+        if (!hasReceivedChunks && simulatedProgress < 95) {
+          simulatedProgress += Math.random() * 3; // Slow random increments
+          setDownloadState({ isDownloading: true, progress: Math.min(Math.floor(simulatedProgress), 95) });
+        }
+      }, 500);
 
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
           
           if (done) break;
+          
+          hasReceivedChunks = true;
+          clearInterval(simulationInterval); // Stop simulation once real chunks arrive
           
           chunks.push(value);
           receivedSize += value.length;
@@ -162,6 +175,8 @@ export function useVideoDownloader() {
           }
         }
       }
+
+      clearInterval(simulationInterval);
         }
       }
 
