@@ -30,11 +30,12 @@ export function DownloadButton({
         return 'Starting...';
       case 'downloading':
         if (downloadState.totalBytes > 0) {
+          const streamLabel = downloadState.message || 'Downloading...';
           return `${downloadState.progress}% • ${formatBytes(downloadState.downloadedBytes)} / ${formatBytes(downloadState.totalBytes)}`;
         }
-        return `Downloading... ${downloadState.progress}%`;
+        return downloadState.message || `Downloading... ${downloadState.progress}%`;
       case 'processing':
-        return 'Processing video...';
+        return 'Merging video & audio...';
       case 'transferring':
         return 'Saving to device...';
       case 'ready':

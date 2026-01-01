@@ -209,10 +209,16 @@ export function useVideoDownloader() {
       const response = await fetch(API_ENDPOINTS.DOWNLOAD_FILE(jobId));
       
       if (!response.ok) {
-        throw new Error('Failed to download file');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
 
       const blob = await response.blob();
+      
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
