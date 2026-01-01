@@ -19,6 +19,9 @@ const Index = () => {
     downloadVideo,
     cancelDownload,
     reset,
+    formatBytes,
+    formatSpeed,
+    formatEta,
   } = useVideoDownloader();
 
   return (
@@ -80,6 +83,9 @@ const Index = () => {
                   downloadState={downloadState}
                   onDownload={downloadVideo}
                   onCancel={cancelDownload}
+                  formatBytes={formatBytes}
+                  formatSpeed={formatSpeed}
+                  formatEta={formatEta}
                 />
               </section>
             </>

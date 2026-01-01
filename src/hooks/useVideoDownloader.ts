@@ -3,36 +3,47 @@ import { VideoInfo, VideoFormat, DownloadState } from "@/types/video";
 import { API_ENDPOINTS } from "@/config/api";
 import { toast } from "@/hooks/use-toast";
 
-// Mock data for demo purposes
-const MOCK_VIDEO_INFO: VideoInfo = {
-  title: "Amazing Nature Documentary - 4K Ultra HD",
-  duration: 754,
-  channel: "Nature Channel",
-  thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1280&h=720&fit=crop",
-  formats: [
-    { format_id: "4k", quality: "4K (2160p)", ext: "mp4", filesize: 2147483648, type: "video" },
-    { format_id: "1440p", quality: "1440p", ext: "mp4", filesize: 1073741824, type: "video" },
-    { format_id: "1080p", quality: "1080p", ext: "mp4", filesize: 536870912, type: "video" },
-    { format_id: "720p", quality: "720p", ext: "mp4", filesize: 268435456, type: "video" },
-    { format_id: "480p", quality: "480p", ext: "mp4", filesize: 134217728, type: "video" },
-    { format_id: "360p", quality: "360p", ext: "mp4", filesize: 67108864, type: "video" },
-    { format_id: "320k", quality: "320kbps", ext: "mp3", filesize: 12582912, type: "audio" },
-    { format_id: "256k", quality: "256kbps", ext: "mp3", filesize: 10066329, type: "audio" },
-    { format_id: "128k", quality: "128kbps", ext: "mp3", filesize: 5033164, type: "audio" },
-  ],
+const initialDownloadState: DownloadState = {
+  isDownloading: false,
+  progress: 0,
+  phase: 'idle',
+  downloadedBytes: 0,
+  totalBytes: 0,
+  speed: 0,
+  eta: 0,
+  message: '',
+  error: null,
 };
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatSpeed(bytesPerSecond: number): string {
+  if (!bytesPerSecond || bytesPerSecond === 0) return '0 MB/s';
+  return formatBytes(bytesPerSecond) + '/s';
+}
+
+function formatEta(seconds: number): string {
+  if (!seconds || seconds === 0) return '';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+}
 
 export function useVideoDownloader() {
   const [url, setUrl] = useState("");
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<VideoFormat | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [downloadState, setDownloadState] = useState<DownloadState>({
-    isDownloading: false,
-    progress: 0,
-    phase: 'idle',
-  });
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [downloadState, setDownloadState] = useState<DownloadState>(initialDownloadState);
+  
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const jobIdRef = useRef<string | null>(null);
 
   const fetchVideoInfo = useCallback(async (videoUrl: string) => {
     setIsLoading(true);
@@ -41,7 +52,6 @@ export function useVideoDownloader() {
     setUrl(videoUrl);
 
     try {
-      // Attempt real API call
       const response = await fetch(API_ENDPOINTS.INFO, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,7 +66,6 @@ export function useVideoDownloader() {
       const data = await response.json();
       setVideoInfo(data);
     } catch (error) {
-      // Show actual error to user
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch video info";
       toast({
         title: "Error",
@@ -72,167 +81,187 @@ export function useVideoDownloader() {
   const downloadVideo = useCallback(async () => {
     if (!selectedFormat || !url) return;
 
-    // Create new AbortController for this download
-    abortControllerRef.current = new AbortController();
-    
-    // Phase 1: Preparing - sending request to server
-    setDownloadState({ isDownloading: true, progress: 0, phase: 'preparing' });
+    // Reset and start
+    setDownloadState({
+      ...initialDownloadState,
+      isDownloading: true,
+      phase: 'starting',
+      message: 'Starting download...',
+    });
 
     toast({
-      title: "Preparing Download",
+      title: "Starting Download",
       description: "Connecting to server...",
       duration: 3000,
     });
 
     try {
-      // Phase 2: Server is fetching from YouTube
-      setDownloadState({ isDownloading: true, progress: 0, phase: 'server-fetching' });
-
-      // Add timeout warning for long videos
-      const timeoutId = setTimeout(() => {
-        toast({
-          title: "Still Processing",
-          description: "Longer videos may take 2-5 minutes. Please be patient...",
-          duration: 15000,
-        });
-      }, 15000);
-
-      // Add second warning
-      const timeoutId2 = setTimeout(() => {
-        toast({
-          title: "Processing Large Video",
-          description: "Server is still working. Don't close this page.",
-          duration: 30000,
-        });
-      }, 60000);
-
-      const response = await fetch(API_ENDPOINTS.DOWNLOAD, {
+      // Step 1: Start the download job
+      const startResponse = await fetch(API_ENDPOINTS.DOWNLOAD_START, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: url,
           format_id: selectedFormat.format_id,
         }),
-        signal: abortControllerRef.current.signal,
       });
 
-      clearTimeout(timeoutId);
-      clearTimeout(timeoutId2);
-
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.status}`);
+      if (!startResponse.ok) {
+        const errorData = await startResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to start download');
       }
 
-      // Get the filename from Content-Disposition header
-      const contentDisposition = response.headers.get("Content-Disposition");
-      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-      const filename = filenameMatch ? filenameMatch[1] : `video.${selectedFormat.ext}`;
+      const { job_id } = await startResponse.json();
+      jobIdRef.current = job_id;
 
-      // Get total size from Content-Length header
-      const contentLength = response.headers.get("Content-Length");
-      const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+      // Step 2: Connect to SSE for progress updates
+      const eventSource = new EventSource(API_ENDPOINTS.DOWNLOAD_PROGRESS(job_id));
+      eventSourceRef.current = eventSource;
 
-      // Phase 3: Transferring - actual download to your device
-      setDownloadState({ isDownloading: true, progress: 0, phase: 'transferring' });
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          // Update download state with real progress
+          setDownloadState({
+            isDownloading: true,
+            progress: data.progress || 0,
+            phase: data.phase || 'downloading',
+            downloadedBytes: data.downloaded_bytes || 0,
+            totalBytes: data.total_bytes || 0,
+            speed: data.speed || 0,
+            eta: data.eta || 0,
+            message: data.message || '',
+            error: data.error || null,
+          });
+
+          // Handle completion
+          if (data.phase === 'ready') {
+            eventSource.close();
+            eventSourceRef.current = null;
+            
+            // Download the file
+            downloadFile(job_id, data.filename);
+          }
+
+          // Handle error
+          if (data.phase === 'error') {
+            eventSource.close();
+            eventSourceRef.current = null;
+            throw new Error(data.error || 'Download failed');
+          }
+        } catch (parseError) {
+          console.error('SSE parse error:', parseError);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        eventSourceRef.current = null;
+        
+        // Only show error if we're still downloading
+        setDownloadState(prev => {
+          if (prev.isDownloading && prev.phase !== 'ready') {
+            toast({
+              title: "Connection Lost",
+              description: "Lost connection to server. Please try again.",
+              variant: "destructive",
+            });
+            return { ...initialDownloadState };
+          }
+          return prev;
+        });
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Download failed";
+      toast({
+        title: "Download Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setDownloadState({ ...initialDownloadState });
+    }
+  }, [selectedFormat, url]);
+
+  const downloadFile = async (jobId: string, filename: string) => {
+    try {
+      setDownloadState(prev => ({
+        ...prev,
+        phase: 'transferring',
+        message: 'Downloading to your device...',
+      }));
 
       toast({
-        title: "Downloading to Your Device",
-        description: "Transfer in progress...",
+        title: "Download Ready",
+        description: "Transferring file to your device...",
         duration: 3000,
       });
 
-      // Track progress using ReadableStream while transferring
-      const reader = response.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let receivedSize = 0;
-      let lastProgress = 0;
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
-          
-          chunks.push(value);
-          receivedSize += value.length;
-          
-          // Update progress percentage only when it changes
-          if (totalSize > 0) {
-            const progress = Math.min(Math.floor((receivedSize / totalSize) * 100), 99);
-            
-            if (progress !== lastProgress) {
-              setDownloadState({ isDownloading: true, progress, phase: 'transferring' });
-              lastProgress = progress;
-            }
-          }
-        }
+      // Fetch the file
+      const response = await fetch(API_ENDPOINTS.DOWNLOAD_FILE(jobId));
+      
+      if (!response.ok) {
+        throw new Error('Failed to download file');
       }
 
-      // Create blob from chunks
-      const blob = new Blob(chunks);
-      
-      // Release button - browser will now handle the download
-      setDownloadState({ isDownloading: false, progress: 0, phase: 'idle' });
-
-      toast({
-        title: "Starting Download",
-        description: "Check your browser downloads...",
-        duration: 2000,
-      });
+      const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = filename;
+      a.download = filename || 'video.mp4';
       document.body.appendChild(a);
       a.click();
       
-      // Cleanup after a delay
       setTimeout(() => {
         window.URL.revokeObjectURL(downloadUrl);
         document.body.removeChild(a);
       }, 100);
+
+      toast({
+        title: "Download Complete!",
+        description: `${filename} - Check your downloads folder.`,
+        duration: 5000,
+      });
+
     } catch (error) {
-      // Check if it was a user cancellation
-      if (error instanceof Error && error.name === 'AbortError') {
-        toast({
-          title: "Download Cancelled",
-          description: "Download was cancelled by user.",
-        });
-      } else if (error instanceof TypeError && error.message.includes('fetch')) {
-        toast({
-          title: "Connection Lost",
-          description: "Server took too long. Try a lower quality or shorter video.",
-          variant: "destructive",
-          duration: 10000,
-        });
-      } else {
-        const errorMessage = error instanceof Error ? error.message : "Download failed";
-        toast({
-          title: "Download Failed",
-          description: `${errorMessage}. For long videos (40+ min), try lower quality (720p/480p).`,
-          variant: "destructive",
-          duration: 10000,
-        });
-      }
+      toast({
+        title: "Transfer Failed",
+        description: "Failed to save file to your device.",
+        variant: "destructive",
+      });
     } finally {
-      abortControllerRef.current = null;
-      setDownloadState({ isDownloading: false, progress: 0, phase: 'idle' });
+      setDownloadState({ ...initialDownloadState });
+      jobIdRef.current = null;
     }
-  }, [selectedFormat, url, videoInfo]);
+  };
 
   const cancelDownload = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    // Close SSE connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
+    
+    jobIdRef.current = null;
+    setDownloadState({ ...initialDownloadState });
+    
+    toast({
+      title: "Download Cancelled",
+      description: "Download was cancelled.",
+    });
   }, []);
 
   const reset = useCallback(() => {
+    cancelDownload();
     setUrl("");
     setVideoInfo(null);
     setSelectedFormat(null);
-    setDownloadState({ isDownloading: false, progress: 0, phase: 'idle' });
-  }, []);
+  }, [cancelDownload]);
 
   return {
     url,
@@ -245,5 +274,9 @@ export function useVideoDownloader() {
     downloadVideo,
     cancelDownload,
     reset,
+    // Helper formatters
+    formatBytes,
+    formatSpeed,
+    formatEta,
   };
 }
