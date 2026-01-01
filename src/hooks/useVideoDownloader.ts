@@ -122,8 +122,18 @@ export function useVideoDownloader() {
         try {
           const data = JSON.parse(event.data);
           
-          if (data.error) {
-            throw new Error(data.error);
+          // Handle error from server
+          if (data.phase === 'error' || data.error) {
+            eventSource.close();
+            eventSourceRef.current = null;
+            const errorMsg = data.error || 'Download failed';
+            toast({
+              title: "Download Failed",
+              description: errorMsg,
+              variant: "destructive",
+            });
+            setDownloadState({ ...initialDownloadState });
+            return;
           }
 
           // Update download state with real progress
@@ -146,13 +156,6 @@ export function useVideoDownloader() {
             
             // Download the file
             downloadFile(job_id, data.filename);
-          }
-
-          // Handle error
-          if (data.phase === 'error') {
-            eventSource.close();
-            eventSourceRef.current = null;
-            throw new Error(data.error || 'Download failed');
           }
         } catch (parseError) {
           console.error('SSE parse error:', parseError);
