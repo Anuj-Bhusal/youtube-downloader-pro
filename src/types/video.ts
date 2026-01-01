@@ -24,4 +24,5 @@ export interface DownloadState {
   eta: number;
   message: string;
   error: string | null;
+  isAudio: boolean;
 }

@@ -13,6 +13,7 @@ const initialDownloadState: DownloadState = {
   eta: 0,
   message: '',
   error: null,
+  isAudio: false,
 };
 
 function formatBytes(bytes: number): string {
@@ -147,6 +148,7 @@ export function useVideoDownloader() {
             eta: data.eta || 0,
             message: data.message || '',
             error: data.error || null,
+            isAudio: data.is_audio || false,
           });
 
           // Handle completion

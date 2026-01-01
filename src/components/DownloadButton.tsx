@@ -35,7 +35,7 @@ export function DownloadButton({
         }
         return downloadState.message || `Downloading... ${downloadState.progress}%`;
       case 'processing':
-        return 'Merging video & audio...';
+        return downloadState.isAudio ? 'Converting to MP3...' : 'Merging video & audio...';
       case 'transferring':
         return 'Saving to device...';
       case 'ready':
