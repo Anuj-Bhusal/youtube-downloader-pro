@@ -167,14 +167,12 @@ export function useVideoDownloader() {
           }
         }
       }
-        }
-      }
 
       // Create blob from chunks
       const blob = new Blob(chunks);
       
       // Release button - browser will now handle the download
-      setDownloadState({ isDownloading: false, progress: 0 });
+      setDownloadState({ isDownloading: false, progress: 0, phase: 'idle' });
 
       toast({
         title: "Starting Download",
@@ -200,12 +198,20 @@ export function useVideoDownloader() {
           title: "Download Cancelled",
           description: "Download was cancelled by user.",
         });
+      } else if (error instanceof TypeError && error.message.includes('fetch')) {
+        toast({
+          title: "Connection Lost",
+          description: "Server took too long. Try a lower quality or shorter video.",
+          variant: "destructive",
+          duration: 10000,
+        });
       } else {
         const errorMessage = error instanceof Error ? error.message : "Download failed";
         toast({
           title: "Download Failed",
-          description: errorMessage,
+          description: `${errorMessage}. For long videos (40+ min), try lower quality (720p/480p).`,
           variant: "destructive",
+          duration: 10000,
         });
       }
     } finally {
