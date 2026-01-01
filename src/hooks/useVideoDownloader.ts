@@ -238,9 +238,11 @@ export function useVideoDownloader() {
       });
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error('Download error:', error);
       toast({
         title: "Transfer Failed",
-        description: "Failed to save file to your device.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
