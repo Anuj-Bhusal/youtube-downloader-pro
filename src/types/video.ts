@@ -17,4 +17,5 @@ export interface VideoInfo {
 export interface DownloadState {
   isDownloading: boolean;
   progress: number;
+  phase: 'idle' | 'preparing' | 'server-fetching' | 'transferring';
 }

@@ -30,6 +30,7 @@ export function useVideoDownloader() {
   const [downloadState, setDownloadState] = useState<DownloadState>({
     isDownloading: false,
     progress: 0,
+    phase: 'idle',
   });
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -73,26 +74,37 @@ export function useVideoDownloader() {
 
     // Create new AbortController for this download
     abortControllerRef.current = new AbortController();
-    setDownloadState({ isDownloading: true, progress: 0 });
+    
+    // Phase 1: Preparing - sending request to server
+    setDownloadState({ isDownloading: true, progress: 0, phase: 'preparing' });
 
-    // Show preparing toast immediately with progress starting at 0%
     toast({
       title: "Preparing Download",
-      description: "Server is fetching video from YouTube...",
-      duration: 5000,
+      description: "Connecting to server...",
+      duration: 3000,
     });
 
-    let prepInterval: NodeJS.Timeout | null = null;
-
     try {
-      // Add timeout warning
+      // Phase 2: Server is fetching from YouTube
+      setDownloadState({ isDownloading: true, progress: 0, phase: 'server-fetching' });
+
+      // Add timeout warning for long videos
       const timeoutId = setTimeout(() => {
         toast({
           title: "Still Processing",
-          description: "Large files may take 30-60 seconds. Please wait...",
-          duration: 10000,
+          description: "Longer videos may take 2-5 minutes. Please be patient...",
+          duration: 15000,
         });
-      }, 8000);
+      }, 15000);
+
+      // Add second warning
+      const timeoutId2 = setTimeout(() => {
+        toast({
+          title: "Processing Large Video",
+          description: "Server is still working. Don't close this page.",
+          duration: 30000,
+        });
+      }, 60000);
 
       const response = await fetch(API_ENDPOINTS.DOWNLOAD, {
         method: "POST",
@@ -105,12 +117,7 @@ export function useVideoDownloader() {
       });
 
       clearTimeout(timeoutId);
-
-      // Clear preparation interval when response arrives
-      if (prepInterval) {
-        clearInterval(prepInterval);
-        prepInterval = null;
-      }
+      clearTimeout(timeoutId2);
 
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
@@ -125,30 +132,20 @@ export function useVideoDownloader() {
       const contentLength = response.headers.get("Content-Length");
       const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
 
+      // Phase 3: Transferring - actual download to your device
+      setDownloadState({ isDownloading: true, progress: 0, phase: 'transferring' });
+
       toast({
-        title: "Downloading",
-        description: "Server is sending your video...",
+        title: "Downloading to Your Device",
+        description: "Transfer in progress...",
         duration: 3000,
       });
 
-      // Track progress using ReadableStream while server is sending
+      // Track progress using ReadableStream while transferring
       const reader = response.body?.getReader();
       const chunks: Uint8Array[] = [];
       let receivedSize = 0;
-      let lastProgress = 10;
-      let hasReceivedChunks = false;
-      
-      // Set initial progress to 10% when actual download starts
-      setDownloadState({ isDownloading: true, progress: 10 });
-
-      // Start slow progress increment while waiting for chunks (simulated progress)
-      let simulatedProgress = 10;
-      const simulationInterval = setInterval(() => {
-        if (!hasReceivedChunks && simulatedProgress < 95) {
-          simulatedProgress += Math.random() * 3; // Slow random increments
-          setDownloadState({ isDownloading: true, progress: Math.min(Math.floor(simulatedProgress), 95) });
-        }
-      }, 500);
+      let lastProgress = 0;
 
       if (reader) {
         while (true) {
@@ -156,27 +153,20 @@ export function useVideoDownloader() {
           
           if (done) break;
           
-          hasReceivedChunks = true;
-          clearInterval(simulationInterval); // Stop simulation once real chunks arrive
-          
           chunks.push(value);
           receivedSize += value.length;
           
           // Update progress percentage only when it changes
           if (totalSize > 0) {
-            // Map 10-99% range to the file download
-            const progress = Math.min(10 + Math.floor((receivedSize / totalSize) * 89), 99);
+            const progress = Math.min(Math.floor((receivedSize / totalSize) * 100), 99);
             
-            // Only update if progress actually changed to avoid skipping numbers
             if (progress !== lastProgress) {
-              setDownloadState({ isDownloading: true, progress });
+              setDownloadState({ isDownloading: true, progress, phase: 'transferring' });
               lastProgress = progress;
             }
           }
         }
       }
-
-      clearInterval(simulationInterval);
         }
       }
 
@@ -220,7 +210,7 @@ export function useVideoDownloader() {
       }
     } finally {
       abortControllerRef.current = null;
-      setDownloadState({ isDownloading: false, progress: 0 });
+      setDownloadState({ isDownloading: false, progress: 0, phase: 'idle' });
     }
   }, [selectedFormat, url, videoInfo]);
 
@@ -235,7 +225,7 @@ export function useVideoDownloader() {
     setUrl("");
     setVideoInfo(null);
     setSelectedFormat(null);
-    setDownloadState({ isDownloading: false, progress: 0 });
+    setDownloadState({ isDownloading: false, progress: 0, phase: 'idle' });
   }, []);
 
   return {

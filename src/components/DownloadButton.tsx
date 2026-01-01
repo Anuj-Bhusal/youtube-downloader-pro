@@ -34,7 +34,11 @@ export function DownloadButton({
           {downloadState.isDownloading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Downloading... {downloadState.progress}%</span>
+              <span>
+                {downloadState.phase === 'preparing' && 'Connecting...'}
+                {downloadState.phase === 'server-fetching' && 'Server fetching from YouTube...'}
+                {downloadState.phase === 'transferring' && `Downloading... ${downloadState.progress}%`}
+              </span>
             </>
           ) : (
             <>
@@ -47,8 +51,8 @@ export function DownloadButton({
             </>
           )}
 
-          {/* Progress bar overlay */}
-          {downloadState.isDownloading && (
+          {/* Progress bar overlay - only show during transfer phase */}
+          {downloadState.isDownloading && downloadState.phase === 'transferring' && (
             <div
               className="absolute left-0 top-0 bottom-0 bg-success-foreground/10 transition-all duration-300"
               style={{ width: `${downloadState.progress}%` }}
